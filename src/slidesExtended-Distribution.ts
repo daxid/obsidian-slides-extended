@@ -23,7 +23,11 @@ export class SlidesExtendedDistribution {
     }
 
     isOutdated(): boolean {
-        return !existsSync(this.distDirectory) || this.isOldVersion();
+        return !this.isPresent() || this.isOldVersion();
+    }
+
+    isPresent(): boolean {
+        return existsSync(this.distDirectory);
     }
 
     isOldVersion(): boolean {

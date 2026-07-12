@@ -1,4 +1,4 @@
-import { addIcon, Plugin, type TAbstractFile } from "obsidian";
+import { addIcon, Notice, Plugin, type TAbstractFile } from "obsidian";
 import type { SlidesExtendedSettings } from "./@types";
 import { EmbeddedSlideProcessor } from "./obsidian/embeddedSlideProcessor";
 import { ObsidianUtils } from "./obsidian/obsidianUtils";
@@ -129,24 +129,48 @@ export class SlidesExtendedPlugin extends Plugin {
     }
 
     layoutReady = async () => {
-        try {
-            const version = this.manifest.version;
-            const distribution = new SlidesExtendedDistribution(this);
+        const version = this.manifest.version;
+        const distribution = new SlidesExtendedDistribution(this);
 
-            console.debug(
-                "Slides Extended v%s, needsReload=%s",
-                version,
-                distribution.isOutdated(),
-            );
-            if (distribution.isOutdated()) {
+        console.debug(
+            "Slides Extended v%s, needsReload=%s",
+            version,
+            distribution.isOutdated(),
+        );
+        if (distribution.isOutdated()) {
+            try {
                 await distribution.update();
                 console.debug("Slides Extended updated to v%s", version);
+            } catch (err) {
+                console.error(
+                    "Slides Extended failed to update distribution files",
+                    err,
+                );
+                if (distribution.isPresent()) {
+                    new Notice(
+                        "Slides Extended: failed to update to the latest version. " +
+                            "Try reinstalling the plugin to fix this (export your settings from the plugin's settings tab first).",
+                        0,
+                    );
+                } else {
+                    new Notice(
+                        "Slides Extended: failed to install distribution files. The preview server can't start. " +
+                            "Try reinstalling the plugin (export your settings from the plugin's settings tab first).",
+                        0,
+                    );
+                    return;
+                }
             }
+        }
 
+        try {
             this.configureServer();
             await this.initServer();
         } catch (err) {
-            console.debug("Slides Extended caught an error", err);
+            console.error(
+                "Slides Extended failed to start the preview server,",
+                err,
+            );
         }
 
         this.autoCompleteSuggester = new AutoCompleteSuggest(this.app);
@@ -157,7 +181,7 @@ export class SlidesExtendedPlugin extends Plugin {
         this.registerEditorSuggest(this.autoCompleteSuggester);
     };
 
-    getViewInstance(): RevealPreviewView {
+    getViewInstance(): RevealPreviewView | null {
         for (const leaf of this.app.workspace.getLeavesOfType(
             REVEAL_PREVIEW_VIEW,
         )) {
@@ -259,13 +283,13 @@ export class SlidesExtendedPlugin extends Plugin {
 
     private async openUrl(url: URL) {
         const instance = this.getViewInstance();
-        instance.setUrl(url.toString());
+        instance?.setUrl(url.toString());
     }
 
     async activateView() {
         this.app.workspace.detachLeavesOfType(REVEAL_PREVIEW_VIEW);
         if (this.settings.paneMode === "sidebar") {
-            await this.app.workspace.getRightLeaf(true).setViewState({
+            await this.app.workspace.getRightLeaf(true)?.setViewState({
                 type: REVEAL_PREVIEW_VIEW,
                 active: true,
             });

@@ -1,5 +1,6 @@
 import {
     type App,
+    Notice,
     PluginSettingTab,
     Setting,
     type TAbstractFile,
@@ -11,12 +12,14 @@ import {
     getThemeFiles,
     ThemeInputSuggest,
 } from "./obsidian/suggesters/ThemeSuggester";
+import { DEFAULT_SETTINGS } from "./slidesExtended-constants";
 import type { SlidesExtendedPlugin } from "./slidesExtended-Plugin";
 
 /** This is because TypeScript's filters are dumb. */
 function isFolder(file: TAbstractFile): file is TFolder {
     return file instanceof TFolder;
 }
+
 export class SlidesExtendedSettingTab extends PluginSettingTab {
     plugin: SlidesExtendedPlugin;
     newSettings!: SlidesExtendedSettings;
@@ -47,6 +50,87 @@ export class SlidesExtendedSettingTab extends PluginSettingTab {
         const { containerEl } = this;
 
         containerEl.empty();
+
+        new Setting(containerEl)
+            .setName("Backup and restore")
+            .setHeading()
+            .setDesc("Save and restore plugin settings");
+
+        new Setting(containerEl)
+            .setName("Export settings")
+            .setDesc("Save the current settings to a JSON file.")
+            .addButton((btn) =>
+                btn.setButtonText("Export").onClick(() => {
+                    const blob = new Blob(
+                        [JSON.stringify(this.plugin.settings, null, 2)],
+                        { type: "application/json" },
+                    );
+                    const url = URL.createObjectURL(blob);
+                    const anchor = document.createElement("a");
+                    anchor.href = url;
+                    anchor.download = "slides-extended-settings.json";
+                    anchor.click();
+                    URL.revokeObjectURL(url);
+                }),
+            );
+
+        const fileInput = containerEl.createEl("input", {
+            type: "file",
+            attr: { accept: "application/json,.json" },
+        });
+        fileInput.style.display = "none";
+        fileInput.addEventListener("change", () => {
+            const file = fileInput.files?.item(0);
+            fileInput.value = "";
+            if (!file) {
+                return;
+            }
+            file.text()
+                .then((contents) => {
+                    let parsed: Partial<SlidesExtendedSettings>;
+                    try {
+                        parsed = JSON.parse(
+                            contents,
+                        ) as Partial<SlidesExtendedSettings>;
+                    } catch (err) {
+                        console.error(
+                            "Slides Extended: failed to parse imported settings",
+                            err,
+                        );
+                        new Notice(
+                            "Slides Extended: that file doesn't contain valid JSON.",
+                        );
+                        return;
+                    }
+                    const imported = Object.assign(
+                        {},
+                        DEFAULT_SETTINGS,
+                        parsed,
+                    );
+                    void this.plugin.update(imported).then(() => {
+                        new Notice("Slides Extended: settings imported.");
+                        this.display();
+                    });
+                })
+                .catch((err: unknown) => {
+                    console.error(
+                        "Slides Extended: failed to read settings file",
+                        err,
+                    );
+                    new Notice(
+                        "Slides Extended: failed to read the settings file.",
+                    );
+                });
+        });
+
+        new Setting(containerEl)
+            .setName("Import settings")
+            .setDesc("Load settings from a previously exported JSON file.")
+            .addButton((btn) =>
+                btn.setButtonText("Import").onClick(() => {
+                    fileInput.click();
+                }),
+            );
 
         new Setting(containerEl)
             .setName("Slide preview mode")
